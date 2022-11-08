@@ -9,6 +9,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,49 +21,50 @@ public class ServerApp {
     static List<Client> clients;
 
     public static void main(String[] args) throws NoSuchAlgorithmException, SQLException {
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        Connection conn = DriverManager.getConnection("jdbc:sqlite:src/server/data.db");
+        conn = DriverManager.getConnection("jdbc:sqlite:src/server/data.db");
         clients = new ArrayList<>();
         try (ServerSocket server = new ServerSocket(5555)) {
 
             while (true) {
-
                 Socket client = server.accept();
-
-                // TODO: make server accept login check for several clients in the same time
-
-                DataInputStream dis = new DataInputStream(client.getInputStream());
-                DataOutputStream dos = new DataOutputStream(client.getOutputStream());
-
-                String username = dis.readUTF();
-                String password = dis.readUTF();
-
-                md.update(password.getBytes());
-                password = init.App.byte2hex(md.digest());
-
-                if (checkLogin(username, password)) {
-                    dos.writeUTF("success");
-                    Client c = new Client(username, getFullName(username), client, dis, dos);
-                    clients.add(c);
-
-                    new Sender(c).start();
-                    new Receiver(c, clients).start();
-                } else {
-                    dos.writeUTF("fail");
-                }
+                new TS(client).start();
             }
         } catch (IOException e) {
             System.err.println(e.getMessage());
         }
     }
 
-    private static String getFullName(String username) {
-        // TODO: get user's name from database using his username 
-        return "Sample Name";
-    }
+    static String getFullName(String username) {
+        try {
+            conn = DriverManager.getConnection("jdbc:sqlite:src/server/data.db");
+            PreparedStatement ps = conn.prepareStatement("SELECT name FROM clients WHERE username = ?;");
+            ps.setString(1, username);
+            ResultSet rs = ps.executeQuery();
+            return rs.getString("name");
+          } catch (Exception e) {
+            System.err.println("Invalid name");
 
-    private static boolean checkLogin(String username, String password) {
-        // TODO: check database for username and password
-        return true;
-    }
-}
+          }
+          return "Invalid name";
+        }
+
+    static boolean checkLogin(String username, String password) {
+        
+        try {
+            conn = DriverManager.getConnection("jdbc:sqlite:src/server/data.db");
+            // prepare sql statement
+            PreparedStatement ps = conn.prepareStatement("SELECT username FROM clients WHERE username = ? AND password = ?;");
+            // passing value into the sql
+            ps.setString(1, username);
+            ps.setString(2, password);
+            ResultSet rs = ps.executeQuery();
+            String userName = rs.getString("username");
+            if (userName != null)
+              return true;
+      
+          } catch (Exception e) {
+            System.err.println("Name or password is falas");
+          }
+          return false;
+        }
+      }
